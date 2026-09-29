@@ -1,4 +1,4 @@
---print("v1.0")
+print("v1.1")
 --[[
 
 Rayfield Interface Suite
@@ -429,6 +429,7 @@ end
 --function gethui() return Rayfield end local http_request = nil local syn = {protect_gui = false,request = false,}local http = nil function writefile(tt,t,ttt)end function isfolder(t)end function makefolder(t)end function isfile(r)end function readfile(t)end
 
 Rayfield.Enabled = false
+Rayfield.Notifications.Template.Description.Text = ""
 
 -- A superseded execution is never parented, so it cannot disturb the window that owns the screen.
 -- Its script carries on building into an orphaned tree, which is invisible and harmless.
@@ -496,6 +497,7 @@ local function isForeignPrompt(Object)
 end
 
 local function clearForeignPrompt(Object)
+	if not isCurrent() then return end
 	if not isForeignPrompt(Object) then return end
 
 	local Root = Object
