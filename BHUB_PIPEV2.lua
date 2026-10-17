@@ -86,6 +86,10 @@ if loader:match("^https://api%.luarmor%.net/files/v[34]/loaders/([a-f0-9]+)%.lua
     return
 end
 
+task.spawn(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB_UPDATE/refs/heads/main/NOTIFY_MISSED.lua"))()
+end)
+
 script_key = nil
 if FFA[scriptName] ~= true then
     local api = loadstring(game:HttpGet("https://sdkapi-public.luarmor.net/library.lua"))()
