@@ -1531,148 +1531,315 @@ local function ClosePrompt()
 	wait(.5)
 	Prompt.Visible = false
 end
+-- Notifications
+Notifications.Template.Visible = false
+Notifications.AnchorPoint = Vector2.new(1, 1)
+Notifications.Position = UDim2.new(1, -20, 1, -20)
+Notifications.Size = UDim2.new(1, -40, 1, -40)
+Notifications.AutomaticSize = Enum.AutomaticSize.None
+Notifications.BackgroundTransparency = 1
+Notifications.Active = false
+Notifications.ClipsDescendants = false
+Notifications.ZIndex = 50
+for _, Object in ipairs(Notifications:GetChildren()) do
+	if Object:IsA("UIAspectRatioConstraint") or Object:IsA("UISizeConstraint") or Object:IsA("UIPadding") or Object:IsA("UIListLayout") then
+		Object:Destroy()
+	end
+end
+local NotificationBounds = Instance.new("UISizeConstraint")
+NotificationBounds.MaxSize = Vector2.new(390, 10000)
+NotificationBounds.Parent = Notifications
+local NotificationScale = Instance.new("UIScale")
+NotificationScale.Parent = Notifications
+local function updateNotificationScale()
+	local RootSize = Rayfield.AbsoluteSize
+	if Main.AbsoluteSize.X <= 0 or RootSize.X <= 0 or RootSize.Y <= 0 then return end
+	-- The card's pixel design is authored against the half-width window at 1920px.
+	local Scale = Main.AbsoluteSize.X / 960
+	NotificationScale.Scale = Scale
+	Notifications.Position = UDim2.new(1, -20 * Scale, 1, -20 * Scale)
+	Notifications.Size = UDim2.fromOffset(math.max(0, math.min(390, RootSize.X / Scale - 40)), math.max(0, RootSize.Y / Scale - 40))
+end
+Main:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
+Rayfield:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
+updateNotificationScale()
+local NotificationLayout = Instance.new("UIListLayout")
+NotificationLayout.FillDirection = Enum.FillDirection.Vertical
+NotificationLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+NotificationLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotificationLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NotificationLayout.Padding = UDim.new(0, 10)
+NotificationLayout.Parent = Notifications
+local NotificationOrder = 0
+
 function RayfieldLibrary:Notify(NotificationSettings)
-	spawn(function()
-			if NotificationSettings.Content and NotificationSettings.Content:lower():match("frappe") then return end
-			if NotificationSettings.Title and NotificationSettings.Title:lower():match("frappe") then return end
-		local ActionCompleted = true
+	task.spawn(function()
+		if NotificationSettings.Content and NotificationSettings.Content:lower():match("frappe") then return end
+		if NotificationSettings.Title and NotificationSettings.Title:lower():match("frappe") then return end
+		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then return end
+
+		local ActionCompleted = false
+		local ActionRunning = false
+		local HasActions = NotificationSettings.Actions and next(NotificationSettings.Actions) ~= nil
+		local Accent = SelectedTheme.SliderProgress
 		local Notification = Notifications.Template:Clone()
-		Notification.Parent = Notifications
+		Notification:ClearAllChildren()
+		NotificationOrder = NotificationOrder + 1
 		Notification.Name = NotificationSettings.Title or "Unknown Title"
+		Notification.LayoutOrder = NotificationOrder
+		Notification.AnchorPoint = Vector2.zero
+		Notification.Position = UDim2.fromOffset(0, 0)
+		Notification.Size = UDim2.new(1, 0, 0, 0)
+		Notification.AutomaticSize = Enum.AutomaticSize.Y
+		Notification.BackgroundTransparency = 1
+		Notification.BorderSizePixel = 0
+		Notification.ClipsDescendants = false
+		Notification.ZIndex = 50
 		Notification.Visible = true
 
-		local blurlight = nil
-		if not false then
-			blurlight = Instance.new("DepthOfFieldEffect",game:GetService("Lighting"))
-			blurlight.Enabled = true
-			blurlight.FarIntensity = 0
-			blurlight.FocusDistance = 51.6
-			blurlight.InFocusRadius = 50
-			blurlight.NearIntensity = 1
-			game:GetService("Debris"):AddItem(script,0)
-		end
+		local Card = Instance.new("Frame")
+		Card.Name = "Card"
+		Card.Size = UDim2.new(1, 0, 0, 0)
+		Card.Position = UDim2.fromOffset(24, 0)
+		Card.AutomaticSize = Enum.AutomaticSize.Y
+		Card.BackgroundColor3 = SelectedTheme.Background
+		Card.BorderSizePixel = 0
+		Card.ClipsDescendants = false
+		Card.ZIndex = 50
+		Card.Parent = Notification
+		local Corner = Instance.new("UICorner")
+		Corner.CornerRadius = UDim.new(0, 14)
+		Corner.Parent = Card
+		local Stroke = Instance.new("UIStroke")
+		Stroke.Color = SelectedTheme.TextColor
+		Stroke.Transparency = 0.88
+		Stroke.Thickness = 1
+		Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		Stroke.Parent = Card
+		local Padding = Instance.new("UIPadding")
+		Padding.PaddingTop = UDim.new(0, 16)
+		Padding.PaddingBottom = UDim.new(0, 16)
+		Padding.PaddingLeft = UDim.new(0, 16)
+		Padding.PaddingRight = UDim.new(0, 16)
+		Padding.Parent = Card
+		local Layout = Instance.new("UIListLayout")
+		Layout.SortOrder = Enum.SortOrder.LayoutOrder
+		Layout.Padding = UDim.new(0, 12)
+		Layout.Parent = Card
 
-		Notification.Actions.Template.Visible = false
+		local Header = Instance.new("Frame")
+		Header.Name = "Header"
+		Header.Size = UDim2.new(1, 0, 0, 40)
+		Header.AutomaticSize = Enum.AutomaticSize.Y
+		Header.BackgroundTransparency = 1
+		Header.ZIndex = 51
+		Header.LayoutOrder = 1
+		Header.Parent = Card
+		local Badge = Instance.new("Frame")
+		Badge.Name = "Badge"
+		Badge.Size = UDim2.fromOffset(40, 40)
+		Badge.BackgroundColor3 = Accent
+		Badge.BackgroundTransparency = 0.88
+		Badge.BorderSizePixel = 0
+		Badge.ZIndex = 51
+		Badge.Parent = Header
+		local BadgeCorner = Corner:Clone()
+		BadgeCorner.CornerRadius = UDim.new(0, 11)
+		BadgeCorner.Parent = Badge
+		local BadgeStroke = Stroke:Clone()
+		BadgeStroke.Color = Accent
+		BadgeStroke.Transparency = 0.78
+		BadgeStroke.Parent = Badge
+		local Icon = Instance.new("ImageLabel")
+		Icon.Name = "Icon"
+		Icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		Icon.Position = UDim2.fromScale(0.5, 0.5)
+		Icon.Size = UDim2.fromOffset(21, 21)
+		Icon.BackgroundTransparency = 1
+		Icon.Image = "rbxassetid://"..tostring(NotificationSettings.Image or 3944680095)
+		Icon.ImageColor3 = Accent
+		Icon.ScaleType = Enum.ScaleType.Fit
+		Icon.ZIndex = 52
+		Icon.Parent = Badge
 
-		if NotificationSettings.Actions then
+		local Copy = Instance.new("Frame")
+		Copy.Name = "Copy"
+		Copy.Position = UDim2.fromOffset(54, 0)
+		Copy.Size = UDim2.new(1, -54, 0, 0)
+		Copy.AutomaticSize = Enum.AutomaticSize.Y
+		Copy.BackgroundTransparency = 1
+		Copy.ZIndex = 51
+		Copy.Parent = Header
+		local CopyLayout = Instance.new("UIListLayout")
+		CopyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		CopyLayout.Padding = UDim.new(0, 5)
+		CopyLayout.Parent = Copy
+		local Title = Instance.new("TextLabel")
+		Title.Name = "Title"
+		Title.Size = UDim2.new(1, 0, 0, 0)
+		Title.AutomaticSize = Enum.AutomaticSize.Y
+		Title.BackgroundTransparency = 1
+		Title.Text = NotificationSettings.Title or "Unknown"
+		Title.Font = Enum.Font.GothamBold
+		Title.TextSize = 14
+		Title.TextColor3 = SelectedTheme.TextColor
+		Title.TextWrapped = true
+		Title.TextXAlignment = Enum.TextXAlignment.Left
+		Title.TextYAlignment = Enum.TextYAlignment.Top
+		Title.LayoutOrder = 1
+		Title.ZIndex = 52
+		Title.Parent = Copy
+		local Description = Title:Clone()
+		Description.Name = "Description"
+		Description.Font = Enum.Font.Gotham
+		Description.TextSize = 13
+		Description.Text = NotificationSettings.Content or "Unknown"
+		Description.TextColor3 = SelectedTheme.TextColor:Lerp(SelectedTheme.Background, 0.22)
+		Description.LayoutOrder = 2
+		Description.Visible = Description.Text ~= ""
+		Description.Parent = Copy
+
+		if HasActions then
+			local Actions = Instance.new("Frame")
+			Actions.Name = "Actions"
+			Actions.Size = UDim2.new(1, 0, 0, 0)
+			Actions.AutomaticSize = Enum.AutomaticSize.Y
+			Actions.BackgroundTransparency = 1
+			Actions.LayoutOrder = 2
+			Actions.ZIndex = 51
+			Actions.Parent = Card
+			local ActionLayout = Layout:Clone()
+			ActionLayout.Padding = UDim.new(0, 8)
+			ActionLayout.Parent = Actions
+			local ActionOrder = 0
 			for _, Action in pairs(NotificationSettings.Actions) do
-				ActionCompleted = false
-				local NewAction = Notification.Actions.Template:Clone()
-				NewAction.BackgroundColor3 = SelectedTheme.NotificationActionsBackground
-				if SelectedTheme ~= RayfieldLibrary.Theme.Default then
-					NewAction.TextColor3 = SelectedTheme.TextColor
-				end
+				ActionOrder = ActionOrder + 1
+				local NewAction = Instance.new("TextButton")
 				NewAction.Name = Action.Name
-				NewAction.Visible = true
-				NewAction.Parent = Notification.Actions
+				NewAction.Size = UDim2.new(1, 0, 0, 36)
+				NewAction.AutomaticSize = Enum.AutomaticSize.Y
+				NewAction.BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.12)
+				NewAction.BorderSizePixel = 0
+				NewAction.AutoButtonColor = false
+				NewAction.Font = Enum.Font.GothamMedium
+				NewAction.TextSize = 13
+				NewAction.TextColor3 = SelectedTheme.TextColor
 				NewAction.Text = Action.Name
-				NewAction.BackgroundTransparency = 1
-				NewAction.TextTransparency = 1
-				NewAction.Size = UDim2.new(0, NewAction.TextBounds.X + 27, 0, 36)
-
-				NewAction.MouseButton1Click:Connect(function()
-					local Success, Response = pcall(Action.Callback)
-					if not Success then
-						--print("Rayfield | Action: "..Action.Name.." Callback Error " ..tostring(Response))
-					end
+				NewAction.TextWrapped = true
+				NewAction.LayoutOrder = ActionOrder
+				NewAction.ZIndex = 52
+				NewAction.Parent = Actions
+				local ActionCorner = Corner:Clone()
+				ActionCorner.CornerRadius = UDim.new(0, 8)
+				ActionCorner.Parent = NewAction
+				local ActionStroke = Stroke:Clone()
+				ActionStroke.Color = Accent
+				ActionStroke.Transparency = 0.72
+				ActionStroke.Parent = NewAction
+				local ActionPadding = Padding:Clone()
+				ActionPadding.PaddingTop = UDim.new(0, 10)
+				ActionPadding.PaddingBottom = UDim.new(0, 10)
+				ActionPadding.PaddingLeft = UDim.new(0, 12)
+				ActionPadding.PaddingRight = UDim.new(0, 12)
+				ActionPadding.Parent = NewAction
+				NewAction.MouseEnter:Connect(function()
+					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.22)}):Play()
+				end)
+				NewAction.MouseLeave:Connect(function()
+					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.12)}):Play()
+				end)
+				NewAction.Activated:Connect(function()
+					if ActionCompleted or ActionRunning or not Notification.Parent then return end
+					if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then return end
+					ActionRunning = true
+					pcall(Action.Callback)
 					ActionCompleted = true
 				end)
 			end
 		end
-		Notification.BackgroundColor3 = SelectedTheme.Background
-		Notification.Title.Text = NotificationSettings.Title or "Unknown"
-		Notification.Title.TextTransparency = 1
-		Notification.Title.TextColor3 = SelectedTheme.TextColor
-		Notification.Description.Text = NotificationSettings.Content or "Unknown"
-		Notification.Description.TextTransparency = 1
-		Notification.Description.TextColor3 = SelectedTheme.TextColor
-		Notification.Icon.ImageColor3 = SelectedTheme.TextColor
-		if NotificationSettings.Image then
-			Notification.Icon.Image = "rbxassetid://"..tostring(NotificationSettings.Image) 
-		else
-			Notification.Icon.Image = "rbxassetid://3944680095"
-		end
 
-		Notification.Icon.ImageTransparency = 1
+		local Progress = Instance.new("Frame")
+		Progress.Name = "Progress"
+		Progress.Size = UDim2.new(1, 0, 0, 2)
+		Progress.BackgroundColor3 = Accent
+		Progress.BackgroundTransparency = 0.9
+		Progress.BorderSizePixel = 0
+		Progress.LayoutOrder = 3
+		Progress.ZIndex = 51
+		Progress.Visible = not HasActions
+		Progress.Parent = Card
+		local ProgressCorner = Corner:Clone()
+		ProgressCorner.CornerRadius = UDim.new(1, 0)
+		ProgressCorner.Parent = Progress
+		local Fill = Instance.new("Frame")
+		Fill.Name = "Fill"
+		Fill.Size = UDim2.fromScale(1, 1)
+		Fill.BackgroundColor3 = Accent
+		Fill.BorderSizePixel = 0
+		Fill.ZIndex = 52
+		Fill.Parent = Progress
+		ProgressCorner:Clone().Parent = Fill
+		local Gradient = Instance.new("UIGradient")
+		Gradient.Color = ColorSequence.new(Accent:Lerp(SelectedTheme.TextColor, 0.3), Accent)
+		Gradient.Parent = Fill
 
-		Notification.Parent = Notifications
-		Notification.Size = UDim2.new(0.604, 0,0.149, 0)
-		Notification.BackgroundTransparency = 1
-
-		TweenService:Create(Notification, TweenInfo.new(0.7, Enum.EasingStyle.Quint), {Size = UDim2.new(0.687, 0,0.17, 0)}):Play()
-		TweenService:Create(Notification, TweenInfo.new(0.7, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.1}):Play()
-		Notification:TweenPosition(UDim2.new(0.5,0,0.915,0),'Out','Quint',0.8,true)
-
-		wait(0.3)
-		TweenService:Create(Notification.Icon, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {ImageTransparency = 0}):Play()
-		TweenService:Create(Notification.Title, TweenInfo.new(0.7, Enum.EasingStyle.Quint), {TextTransparency = 0}):Play()
-		TweenService:Create(Notification.Description, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 0.2}):Play()
-		wait(0.2)
-
-
-
-		-- Requires Graphics Level 8-10
-		if false == nil then
-			TweenService:Create(Notification, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.4}):Play()
-		else
-			if not false then
-				TweenService:Create(Notification, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.4}):Play()
-			else 
-				TweenService:Create(Notification, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {BackgroundTransparency = 0}):Play()
-			end
-		end
-
-		if Rayfield.Name == "Rayfield" then
-			neon:BindFrame(Notification.BlurModule, {
-				Transparency = 0.98;
-				BrickColor = BrickColor.new("Institutional white");
-			})
-		end
-
-		if not NotificationSettings.Actions then
-			wait(NotificationSettings.Duration or NotificationDuration - 0.5)
-		else
-			wait(0.8)
-			TweenService:Create(Notification, TweenInfo.new(0.7, Enum.EasingStyle.Quint), {Size = UDim2.new(0.996, 0,0.246, 0)}):Play()
-			wait(0.3)
-			for _, Action in ipairs(Notification.Actions:GetChildren()) do
-				if Action.ClassName == "TextButton" and Action.Name ~= "Template" then
-					TweenService:Create(Action, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.2}):Play()
-					TweenService:Create(Action, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 0}):Play()
-					wait(0.05)
+		local FadeTargets = {}
+		for _, Object in ipairs(Notification:GetDescendants()) do
+			local Properties = {}
+			if Object:IsA("GuiObject") then
+				Properties.BackgroundTransparency = Object.BackgroundTransparency
+				if Object:IsA("TextLabel") or Object:IsA("TextButton") then
+					Properties.TextTransparency = Object.TextTransparency
+				elseif Object:IsA("ImageLabel") then
+					Properties.ImageTransparency = Object.ImageTransparency
 				end
+			elseif Object:IsA("UIStroke") then
+				Properties.Transparency = Object.Transparency
+			end
+			if next(Properties) then
+				FadeTargets[Object] = Properties
+				for Property in pairs(Properties) do Object[Property] = 1 end
 			end
 		end
+		Notification.Parent = Notifications
+		for Object, Properties in pairs(FadeTargets) do
+			TweenService:Create(Object, TweenInfo.new(0.24, Enum.EasingStyle.Quint), Properties):Play()
+		end
+		TweenService:Create(Card, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.fromOffset(0, 0)}):Play()
+		task.wait(0.32)
+		if not Notification.Parent then return end
 
-		repeat wait(0.001) until ActionCompleted
-
-		for _, Action in ipairs(Notification.Actions:GetChildren()) do
-			if Action.ClassName == "TextButton" and Action.Name ~= "Template" then
-				TweenService:Create(Action, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}):Play()
-				TweenService:Create(Action, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 1}):Play()
-			end
+		local Duration = math.max(0, tonumber(NotificationSettings.Duration) or NotificationDuration - 0.5)
+		local Countdown
+		if not HasActions then
+			Countdown = TweenService:Create(Fill, TweenInfo.new(Duration, Enum.EasingStyle.Linear), {Size = UDim2.fromScale(0, 1)})
+			Countdown:Play()
+		end
+		local Deadline = tick() + Duration
+		while Notification.Parent and (BackgroundTest or (isCurrent() and Rayfield.Parent)) do
+			if ActionCompleted or (not HasActions and tick() >= Deadline) then break end
+			task.wait(0.1)
+		end
+		if Countdown then Countdown:Cancel() end
+		if not Notification.Parent then return end
+		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then
+			Notification:Destroy()
+			return
 		end
 
-		TweenService:Create(Notification.Title, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {Position = UDim2.new(0.47, 0,0.234, 0)}):Play()
-		TweenService:Create(Notification.Description, TweenInfo.new(0.8, Enum.EasingStyle.Quint), {Position = UDim2.new(0.528, 0,0.637, 0)}):Play()
-		TweenService:Create(Notification, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {Size = UDim2.new(0.626, 0,0.155, 0)}):Play()
-		TweenService:Create(Notification.Icon, TweenInfo.new(0.4, Enum.EasingStyle.Quint), {ImageTransparency = 1}):Play()
-		TweenService:Create(Notification, TweenInfo.new(0.8, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.6}):Play()
-
-		wait(0.3)
-		TweenService:Create(Notification.Title, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 0.4}):Play()
-		TweenService:Create(Notification.Description, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 0.5}):Play()
-		wait(0.4)
-		TweenService:Create(Notification, TweenInfo.new(0.9, Enum.EasingStyle.Quint), {Size = UDim2.new(0, 0,0, 0)}):Play()
-		TweenService:Create(Notification, TweenInfo.new(0.8, Enum.EasingStyle.Quint), {BackgroundTransparency = 1}):Play()
-		TweenService:Create(Notification.Title, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 1}):Play()
-		TweenService:Create(Notification.Description, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {TextTransparency = 1}):Play()
-		wait(0.2)
-		if not false then
-			neon:UnbindFrame(Notification.BlurModule)
-			blurlight:Destroy()
+		for Object, Properties in pairs(FadeTargets) do
+			local HiddenProperties = {}
+			for Property in pairs(Properties) do HiddenProperties[Property] = 1 end
+			TweenService:Create(Object, TweenInfo.new(0.2, Enum.EasingStyle.Quint), HiddenProperties):Play()
 		end
-		wait(0.9)
+		TweenService:Create(Card, TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.fromOffset(20, 0)}):Play()
+		task.wait(0.2)
+		if not Notification.Parent then return end
+		Notification.Size = UDim2.new(1, 0, 0, Notification.AbsoluteSize.Y / NotificationScale.Scale)
+		Notification.AutomaticSize = Enum.AutomaticSize.None
+		Card.Visible = false
+		TweenService:Create(Notification, TweenInfo.new(0.18, Enum.EasingStyle.Quint), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+		task.wait(0.18)
 		Notification:Destroy()
 	end)
 end
