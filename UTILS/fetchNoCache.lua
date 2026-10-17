@@ -6,7 +6,9 @@ local function readTable(source, name)
     local chunk = loadstring(source, "@" .. name)
     if not chunk then return nil end
     local ok, result = pcall(chunk)
-    if ok and type(result) == "table" then return result end
+    if ok and (type(result) == "table" or type(result) == "function") then
+        return result
+    end
 end
 
 local function fetchNoCache(raw)
