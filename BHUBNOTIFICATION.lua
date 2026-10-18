@@ -21,49 +21,56 @@ else
 	InterfaceParent = Players.LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local NotifyGui = Instance.new("ScreenGui")
-NotifyGui.Name = "BHUBNotify"
-NotifyGui.ResetOnSpawn = false
-NotifyGui.DisplayOrder = 100
-NotifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-NotifyGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
-if not gethui and syn and syn.protect_gui then
-	syn.protect_gui(NotifyGui)
-end
+local NotifyState = _G.BHUBNotify
+if not NotifyState or not NotifyState.Gui.Parent then
+	local NotifyGui = Instance.new("ScreenGui")
+	NotifyGui.Name = "BHUBNotify"
+	NotifyGui.ResetOnSpawn = false
+	NotifyGui.DisplayOrder = 100
+	NotifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	NotifyGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	if not gethui and syn and syn.protect_gui then
+		syn.protect_gui(NotifyGui)
+	end
 
-local Notifications = Instance.new("Frame")
-Notifications.Name = "Notifications"
-Notifications.AnchorPoint = Vector2.new(1, 1)
-Notifications.BackgroundTransparency = 1
-Notifications.Active = false
-Notifications.ClipsDescendants = false
-Notifications.ZIndex = 50
-Notifications.Parent = NotifyGui
-local NotificationBounds = Instance.new("UISizeConstraint")
-NotificationBounds.MaxSize = Vector2.new(390, 10000)
-NotificationBounds.Parent = Notifications
-local NotificationScale = Instance.new("UIScale")
-NotificationScale.Parent = Notifications
-local function updateNotificationScale()
-	local RootSize = NotifyGui.AbsoluteSize
-	if RootSize.X <= 0 or RootSize.Y <= 0 then return end
-	-- Matches Rogefield's default half-width window at a 1920px reference viewport.
-	local Scale = RootSize.X / 1920
-	NotificationScale.Scale = Scale
-	Notifications.Position = UDim2.new(1, -20 * Scale, 1, -20 * Scale)
-	Notifications.Size = UDim2.fromOffset(math.max(0, math.min(390, RootSize.X / Scale - 40)), math.max(0, RootSize.Y / Scale - 40))
+	local Notifications = Instance.new("Frame")
+	Notifications.Name = "Notifications"
+	Notifications.AnchorPoint = Vector2.new(1, 1)
+	Notifications.BackgroundTransparency = 1
+	Notifications.Active = false
+	Notifications.ClipsDescendants = false
+	Notifications.ZIndex = 50
+	Notifications.Parent = NotifyGui
+	local NotificationBounds = Instance.new("UISizeConstraint")
+	NotificationBounds.MaxSize = Vector2.new(390, 10000)
+	NotificationBounds.Parent = Notifications
+	local NotificationScale = Instance.new("UIScale")
+	NotificationScale.Parent = Notifications
+	local function updateNotificationScale()
+		local RootSize = NotifyGui.AbsoluteSize
+		if RootSize.X <= 0 or RootSize.Y <= 0 then return end
+		-- Matches Rogefield's default half-width window at a 1920px reference viewport.
+		local Scale = RootSize.X / 1920
+		NotificationScale.Scale = Scale
+		Notifications.Position = UDim2.new(1, -20 * Scale, 1, -20 * Scale)
+		Notifications.Size = UDim2.fromOffset(math.max(0, math.min(390, RootSize.X / Scale - 40)), math.max(0, RootSize.Y / Scale - 40))
+	end
+	NotifyGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
+	local NotificationLayout = Instance.new("UIListLayout")
+	NotificationLayout.FillDirection = Enum.FillDirection.Vertical
+	NotificationLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	NotificationLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	NotificationLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	NotificationLayout.Padding = UDim.new(0, 10)
+	NotificationLayout.Parent = Notifications
+	NotifyGui.Parent = InterfaceParent
+	updateNotificationScale()
+	NotifyState = {Gui = NotifyGui, Notifications = Notifications, Scale = NotificationScale, Order = 0}
+	_G.BHUBNotify = NotifyState
 end
-NotifyGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
-local NotificationLayout = Instance.new("UIListLayout")
-NotificationLayout.FillDirection = Enum.FillDirection.Vertical
-NotificationLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-NotificationLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-NotificationLayout.SortOrder = Enum.SortOrder.LayoutOrder
-NotificationLayout.Padding = UDim.new(0, 10)
-NotificationLayout.Parent = Notifications
-local NotificationOrder = 0
-NotifyGui.Parent = InterfaceParent
-updateNotificationScale()
+local NotifyGui = NotifyState.Gui
+local Notifications = NotifyState.Notifications
+local NotificationScale = NotifyState.Scale
 
 local function Notify(NotificationSettings)
 	task.spawn(function()
@@ -81,9 +88,9 @@ local function Notify(NotificationSettings)
 		local ActionRunning = false
 		local HasActions = NotificationSettings.Actions and next(NotificationSettings.Actions) ~= nil
 		local Notification = Instance.new("Frame")
-		NotificationOrder = NotificationOrder + 1
+		NotifyState.Order = NotifyState.Order + 1
 		Notification.Name = NotificationSettings.Title or "Unknown Title"
-		Notification.LayoutOrder = NotificationOrder
+		Notification.LayoutOrder = NotifyState.Order
 		Notification.AnchorPoint = Vector2.zero
 		Notification.Position = UDim2.fromOffset(0, 0)
 		Notification.Size = UDim2.new(1, 0, 0, 0)
@@ -264,7 +271,7 @@ local function Notify(NotificationSettings)
 		Progress.BorderSizePixel = 0
 		Progress.LayoutOrder = 3
 		Progress.ZIndex = 51
-		Progress.Visible = not HasActions
+		Progress.Visible = true
 		Progress.Parent = Card
 		local ProgressCorner = Corner:Clone()
 		ProgressCorner.CornerRadius = UDim.new(1, 0)
@@ -308,17 +315,15 @@ local function Notify(NotificationSettings)
 		if not Notification.Parent then return end
 
 		local Duration = math.max(0, tonumber(NotificationSettings.Duration) or NotificationDuration - 0.5)
-		local Countdown
-		if not HasActions then
-			Countdown = TweenService:Create(Fill, TweenInfo.new(Duration, Enum.EasingStyle.Linear), {Size = UDim2.fromScale(0, 1)})
-			Countdown:Play()
-		end
+		local Countdown = TweenService:Create(Fill, TweenInfo.new(Duration, Enum.EasingStyle.Linear), {Size = UDim2.fromScale(0, 1)})
+		Countdown:Play()
 		local Deadline = tick() + Duration
 		while Notification.Parent and NotifyGui.Parent do
-			if ActionCompleted or (not HasActions and tick() >= Deadline) then break end
+			if ActionCompleted or tick() >= Deadline then break end
 			task.wait(0.1)
 		end
-		if Countdown then Countdown:Cancel() end
+		ActionCompleted = true
+		Countdown:Cancel()
 		if not Notification.Parent then return end
 		if not NotifyGui.Parent then
 			Notification:Destroy()
