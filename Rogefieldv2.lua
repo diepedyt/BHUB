@@ -1533,60 +1533,89 @@ local function ClosePrompt()
 end
 -- Notifications
 Notifications.Template.Visible = false
-Notifications.AnchorPoint = Vector2.new(1, 1)
-Notifications.Position = UDim2.new(1, -20, 1, -20)
-Notifications.Size = UDim2.new(1, -40, 1, -40)
-Notifications.AutomaticSize = Enum.AutomaticSize.None
-Notifications.BackgroundTransparency = 1
-Notifications.Active = false
-Notifications.ClipsDescendants = false
-Notifications.ZIndex = 50
-for _, Object in ipairs(Notifications:GetChildren()) do
-	if Object:IsA("UIAspectRatioConstraint") or Object:IsA("UISizeConstraint") or Object:IsA("UIPadding") or Object:IsA("UIListLayout") then
-		Object:Destroy()
+Notifications.Visible = false
+local NotifyState = not BackgroundTest and _G.BHUBNotify
+local CreateNotifyState = not NotifyState or not NotifyState.Gui.Parent
+if CreateNotifyState then
+	local NotifyGui = Instance.new("ScreenGui")
+	NotifyGui.Name = "BHUBNotify"
+	NotifyGui.ResetOnSpawn = false
+	NotifyGui.DisplayOrder = 100
+	NotifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	NotifyGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	if not BackgroundTest and isCurrent() and not gethui and syn.protect_gui then
+		syn.protect_gui(NotifyGui)
+	end
+
+	local Notifications = Instance.new("Frame")
+	Notifications.Name = "Notifications"
+	Notifications.AnchorPoint = Vector2.new(1, 1)
+	Notifications.BackgroundTransparency = 1
+	Notifications.Active = false
+	Notifications.ClipsDescendants = false
+	Notifications.ZIndex = 50
+	Notifications.Parent = NotifyGui
+	local NotificationBounds = Instance.new("UISizeConstraint")
+	NotificationBounds.MaxSize = Vector2.new(390, 10000)
+	NotificationBounds.Parent = Notifications
+	local NotificationScale = Instance.new("UIScale")
+	NotificationScale.Parent = Notifications
+	local NotificationLayout = Instance.new("UIListLayout")
+	NotificationLayout.FillDirection = Enum.FillDirection.Vertical
+	NotificationLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	NotificationLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	NotificationLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	NotificationLayout.Padding = UDim.new(0, 10)
+	NotificationLayout.Parent = Notifications
+	NotifyState = {Gui = NotifyGui, Notifications = Notifications, Scale = NotificationScale, Order = 0}
+	if not BackgroundTest and isCurrent() and Rayfield.Parent then
+		NotifyGui.Parent = Rayfield.Parent
+		_G.BHUBNotify = NotifyState
 	end
 end
-local NotificationBounds = Instance.new("UISizeConstraint")
-NotificationBounds.MaxSize = Vector2.new(390, 10000)
-NotificationBounds.Parent = Notifications
-local NotificationScale = Instance.new("UIScale")
-NotificationScale.Parent = Notifications
+local NotifyGui = NotifyState.Gui
+Notifications = NotifyState.Notifications
+local NotificationScale = NotifyState.Scale
+if BackgroundTest or (isCurrent() and Rayfield.Parent) then
+	NotifyState.Window = Rayfield
+	NotifyState.Main = Main
+end
 local function updateNotificationScale()
-	local RootSize = Rayfield.AbsoluteSize
-	if Main.AbsoluteSize.X <= 0 or RootSize.X <= 0 or RootSize.Y <= 0 then return end
-	-- The card's pixel design is authored against the half-width window at 1920px.
-	local Scale = Main.AbsoluteSize.X / 960
+	local RootSize = BackgroundTest and Rayfield.AbsoluteSize or NotifyGui.AbsoluteSize
+	if RootSize.X <= 0 or RootSize.Y <= 0 then return end
+	local Scale = RootSize.X / 1920
+	if (BackgroundTest or (NotifyState.Window and NotifyState.Window.Parent)) and NotifyState.Main.AbsoluteSize.X > 0 then
+		Scale = NotifyState.Main.AbsoluteSize.X / 960
+	end
 	NotificationScale.Scale = Scale
 	Notifications.Position = UDim2.new(1, -20 * Scale, 1, -20 * Scale)
 	Notifications.Size = UDim2.fromOffset(math.max(0, math.min(390, RootSize.X / Scale - 40)), math.max(0, RootSize.Y / Scale - 40))
 end
+if CreateNotifyState then
+	NotifyGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
+end
 Main:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
-Rayfield:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateNotificationScale)
 updateNotificationScale()
-local NotificationLayout = Instance.new("UIListLayout")
-NotificationLayout.FillDirection = Enum.FillDirection.Vertical
-NotificationLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-NotificationLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-NotificationLayout.SortOrder = Enum.SortOrder.LayoutOrder
-NotificationLayout.Padding = UDim.new(0, 10)
-NotificationLayout.Parent = Notifications
-local NotificationOrder = 0
 
 function RayfieldLibrary:Notify(NotificationSettings)
 	task.spawn(function()
 		if NotificationSettings.Content and NotificationSettings.Content:lower():match("frappe") then return end
 		if NotificationSettings.Title and NotificationSettings.Title:lower():match("frappe") then return end
-		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then return end
+		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent or not NotifyGui.Parent) then return end
 
+		local Theme = NotificationSettings.Theme
+		if type(Theme) == "string" then Theme = RayfieldLibrary.Theme[Theme] end
+		if type(Theme) ~= "table" then Theme = SelectedTheme end
+		local Background = Theme.Background or SelectedTheme.Background
+		local TextColor = Theme.TextColor or SelectedTheme.TextColor
+		local Accent = Theme.SliderProgress or SelectedTheme.SliderProgress
 		local ActionCompleted = false
 		local ActionRunning = false
 		local HasActions = NotificationSettings.Actions and next(NotificationSettings.Actions) ~= nil
-		local Accent = SelectedTheme.SliderProgress
-		local Notification = Notifications.Template:Clone()
-		Notification:ClearAllChildren()
-		NotificationOrder = NotificationOrder + 1
+		local Notification = Instance.new("Frame")
+		NotifyState.Order = NotifyState.Order + 1
 		Notification.Name = NotificationSettings.Title or "Unknown Title"
-		Notification.LayoutOrder = NotificationOrder
+		Notification.LayoutOrder = NotifyState.Order
 		Notification.AnchorPoint = Vector2.zero
 		Notification.Position = UDim2.fromOffset(0, 0)
 		Notification.Size = UDim2.new(1, 0, 0, 0)
@@ -1602,7 +1631,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Card.Size = UDim2.new(1, 0, 0, 0)
 		Card.Position = UDim2.fromOffset(24, 0)
 		Card.AutomaticSize = Enum.AutomaticSize.Y
-		Card.BackgroundColor3 = SelectedTheme.Background
+		Card.BackgroundColor3 = Background
 		Card.BorderSizePixel = 0
 		Card.ClipsDescendants = false
 		Card.ZIndex = 50
@@ -1611,7 +1640,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Corner.CornerRadius = UDim.new(0, 14)
 		Corner.Parent = Card
 		local Stroke = Instance.new("UIStroke")
-		Stroke.Color = SelectedTheme.TextColor
+		Stroke.Color = TextColor
 		Stroke.Transparency = 0.88
 		Stroke.Thickness = 1
 		Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -1656,7 +1685,8 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Icon.Position = UDim2.fromScale(0.5, 0.5)
 		Icon.Size = UDim2.fromOffset(21, 21)
 		Icon.BackgroundTransparency = 1
-		Icon.Image = "rbxassetid://"..tostring(NotificationSettings.Image or 3944680095)
+		local Image = NotificationSettings.Image or 3944680095
+		Icon.Image = tonumber(Image) and "rbxassetid://"..tostring(Image) or tostring(Image)
 		Icon.ImageColor3 = Accent
 		Icon.ScaleType = Enum.ScaleType.Fit
 		Icon.ZIndex = 52
@@ -1682,7 +1712,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Title.Text = NotificationSettings.Title or "Unknown"
 		Title.Font = Enum.Font.GothamBold
 		Title.TextSize = 14
-		Title.TextColor3 = SelectedTheme.TextColor
+		Title.TextColor3 = TextColor
 		Title.TextWrapped = true
 		Title.TextXAlignment = Enum.TextXAlignment.Left
 		Title.TextYAlignment = Enum.TextYAlignment.Top
@@ -1694,7 +1724,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Description.Font = Enum.Font.Gotham
 		Description.TextSize = 13
 		Description.Text = NotificationSettings.Content or "Unknown"
-		Description.TextColor3 = SelectedTheme.TextColor:Lerp(SelectedTheme.Background, 0.22)
+		Description.TextColor3 = TextColor:Lerp(Background, 0.22)
 		Description.LayoutOrder = 2
 		Description.Visible = Description.Text ~= ""
 		Description.Parent = Copy
@@ -1718,12 +1748,12 @@ function RayfieldLibrary:Notify(NotificationSettings)
 				NewAction.Name = Action.Name
 				NewAction.Size = UDim2.new(1, 0, 0, 36)
 				NewAction.AutomaticSize = Enum.AutomaticSize.Y
-				NewAction.BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.12)
+				NewAction.BackgroundColor3 = Background:Lerp(Accent, 0.12)
 				NewAction.BorderSizePixel = 0
 				NewAction.AutoButtonColor = false
 				NewAction.Font = Enum.Font.GothamMedium
 				NewAction.TextSize = 13
-				NewAction.TextColor3 = SelectedTheme.TextColor
+				NewAction.TextColor3 = TextColor
 				NewAction.Text = Action.Name
 				NewAction.TextWrapped = true
 				NewAction.LayoutOrder = ActionOrder
@@ -1743,14 +1773,14 @@ function RayfieldLibrary:Notify(NotificationSettings)
 				ActionPadding.PaddingRight = UDim.new(0, 12)
 				ActionPadding.Parent = NewAction
 				NewAction.MouseEnter:Connect(function()
-					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.22)}):Play()
+					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = Background:Lerp(Accent, 0.22)}):Play()
 				end)
 				NewAction.MouseLeave:Connect(function()
-					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = SelectedTheme.Background:Lerp(Accent, 0.12)}):Play()
+					TweenService:Create(NewAction, TweenInfo.new(0.15), {BackgroundColor3 = Background:Lerp(Accent, 0.12)}):Play()
 				end)
 				NewAction.Activated:Connect(function()
 					if ActionCompleted or ActionRunning or not Notification.Parent then return end
-					if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then return end
+					if not BackgroundTest and (not isCurrent() or not Rayfield.Parent or not NotifyGui.Parent) then return end
 					ActionRunning = true
 					pcall(Action.Callback)
 					ActionCompleted = true
@@ -1766,7 +1796,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Progress.BorderSizePixel = 0
 		Progress.LayoutOrder = 3
 		Progress.ZIndex = 51
-		Progress.Visible = not HasActions
+		Progress.Visible = true
 		Progress.Parent = Card
 		local ProgressCorner = Corner:Clone()
 		ProgressCorner.CornerRadius = UDim.new(1, 0)
@@ -1780,7 +1810,7 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		Fill.Parent = Progress
 		ProgressCorner:Clone().Parent = Fill
 		local Gradient = Instance.new("UIGradient")
-		Gradient.Color = ColorSequence.new(Accent:Lerp(SelectedTheme.TextColor, 0.3), Accent)
+		Gradient.Color = ColorSequence.new(Accent:Lerp(TextColor, 0.3), Accent)
 		Gradient.Parent = Fill
 
 		local FadeTargets = {}
@@ -1810,19 +1840,17 @@ function RayfieldLibrary:Notify(NotificationSettings)
 		if not Notification.Parent then return end
 
 		local Duration = math.max(0, tonumber(NotificationSettings.Duration) or NotificationDuration - 0.5)
-		local Countdown
-		if not HasActions then
-			Countdown = TweenService:Create(Fill, TweenInfo.new(Duration, Enum.EasingStyle.Linear), {Size = UDim2.fromScale(0, 1)})
-			Countdown:Play()
-		end
+		local Countdown = TweenService:Create(Fill, TweenInfo.new(Duration, Enum.EasingStyle.Linear), {Size = UDim2.fromScale(0, 1)})
+		Countdown:Play()
 		local Deadline = tick() + Duration
-		while Notification.Parent and (BackgroundTest or (isCurrent() and Rayfield.Parent)) do
-			if ActionCompleted or (not HasActions and tick() >= Deadline) then break end
+		while Notification.Parent and (BackgroundTest or (isCurrent() and Rayfield.Parent and NotifyGui.Parent)) do
+			if ActionCompleted or tick() >= Deadline then break end
 			task.wait(0.1)
 		end
-		if Countdown then Countdown:Cancel() end
+		ActionCompleted = true
+		Countdown:Cancel()
 		if not Notification.Parent then return end
-		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent) then
+		if not BackgroundTest and (not isCurrent() or not Rayfield.Parent or not NotifyGui.Parent) then
 			Notification:Destroy()
 			return
 		end
@@ -2802,7 +2830,6 @@ function RayfieldLibrary:CreateWindow(Settings, wl)
 		repeat wait() until Passthrough
 	end
 
-	Notifications.Template.Visible = false
 	Notifications.Visible = true
 	Rayfield.Enabled = true
 	if BackgroundTest then
