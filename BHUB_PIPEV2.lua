@@ -90,12 +90,32 @@ task.spawn(function()
     loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB_UPDATE/refs/heads/main/NOTIFY_MISSED.lua"))()
 end)
 
-script_key = nil
-if FFA[scriptName] ~= true then
+local BHUB_NOTIFY = loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB/refs/heads/main/BHUBNOTIFICATION.lua"))()
+
+local _script_key = nil
+pcall(function()
+    local env = getfenv(1)
+    local tSK = (env and env.script_key)
+    if tSK then
+        _script_key = tSK
+        BHUB_NOTIFY({
+            Title = "Key Loaded",
+            Content = "Key Loaded Succesfully"
+        })
+    end
+end)
+script_key = _script_key
+
+if FFA[scriptName] ~= true and not script_key then
     local api = loadstring(game:HttpGet("https://sdkapi-public.luarmor.net/library.lua"))()
     local module = loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB/refs/heads/main/BHUBKEYSYS.lua"))()
     api.script_id = scriptId
 
+    BHUB_NOTIFY({
+        Title = "Key System",
+        Content = "Enter A Key To Continue"
+    })
+    
     module:SetSavedKeyFile("BananaHub" .. scriptId .. tostring(player.UserId))
     script_key = module:GetKeyInput(
         "discord.gg/BananaHub",
@@ -104,14 +124,30 @@ if FFA[scriptName] ~= true then
             if type(key) ~= "string" then return false end
             key = key:gsub("%s+", "")
             local ok, status = pcall(api.check_key, key)
-            return ok and type(status) == "table" and status.code == "KEY_VALID"
+            local keyIsValid = (ok and type(status) == "table" and status.code == "KEY_VALID")
+            if not keyIsValid then
+                BHUB_NOTIFY({
+                    Title = "Key Error",
+                    Content = "The Entered Key Is Incorrect",
+                    Theme = {SliderProgress = Color3.fromRGB(255, 10, 10)}
+                })
+            end
+            return keyIsValid
         end
     )
 
+    BHUB_NOTIFY({
+        Title = "Key Loaded",
+        Content = "Key Loaded Succesfully"
+    })
+    
     if type(script_key) ~= "string" or script_key == "" then
         player:Kick("BHUB: KEY REQUIRED")
         return
     end
+
+    
+    
 end
 
 loadstring(game:HttpGet(loader))()
