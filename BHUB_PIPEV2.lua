@@ -106,83 +106,103 @@ pcall(function()
 end)
 script_key = _script_key
 
-do
-    local function requestTrial()
-        local player = game:GetService("Players").LocalPlayer
-        if not player then return nil end
-
-        local bucket, text = 5381, "bhub-trials-v2:" .. tostring(player.UserId)
-        for i = 1, #text do
-            bucket = (bucket * 33 + string.byte(text, i)) % 2147483647
+-- Free trial: one POST with an empty body. The server decides everything (who, how
+-- long, limits). Returns {key, minutes} or nil; any error or timeout is just nil.
+local function requestTrial()
+    if type(requestFn) ~= "function" then return nil end
+    local result, done = nil, false
+    local ok, worker = pcall(task.spawn, function()
+        local sent, response = pcall(requestFn, {
+            Url = "https://57.129.160.111/v2/trial",
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = "{}",
+            Timeout = 8,
+        })
+        if sent and type(response) == "table" and tonumber(response.StatusCode) == 200 then
+            local decoded, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+            if decoded and type(data) == "table" and type(data.key) == "string" and #data.key == 32 then
+                result = data
+            end
         end
-        if bucket % 10000 >= 4000 then return nil end
-
-        local send = request or http_request or (syn and syn.request) or (http and http.request)
-        if type(send) ~= "function" then return nil end
-
-        local done, deadline = false, os.clock() + 4
-        local ok, worker = pcall(task.spawn, function()
-            pcall(send, {
-                Url = "https://57.129.160.111/v2/trial",
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = "{}",
-                Timeout = 4,
-            })
-            done = true
-        end)
-        if not ok then return nil end
-        while not done and os.clock() < deadline do
-            task.wait(math.min(0.05, deadline - os.clock()))
-        end
-        if not done then pcall(task.cancel, worker) end
-        return nil
+        done = true
+    end)
+    if not ok then return nil end
+    local deadline = os.clock() + 8
+    while not done and os.clock() < deadline do
+        task.wait(0.05)
     end
-    pcall(requestTrial)
+    if not done then pcall(task.cancel, worker) end
+    return result
 end
 
 if FFA[scriptName] ~= true and not script_key then
     local api = loadstring(game:HttpGet("https://sdkapi-public.luarmor.net/library.lua"))()
     local module = loadstring(game:HttpGet("https://raw.githubusercontent.com/diepedyt/BHUB/refs/heads/main/BHUBKEYSYS.lua"))()
     api.script_id = scriptId
-
-    BHUB_NOTIFY({
-        Title = "Key System",
-        Content = "Enter A Key To Continue"
-    })
-    
     module:SetSavedKeyFile("BananaHub" .. scriptId .. tostring(player.UserId))
-    script_key = module:GetKeyInput(
-        "discord.gg/BananaHub",
-        "https://raw.githubusercontent.com/diepedyt/bui/refs/heads/main/HowToFreeKey.txt",
-        function(key)
-            if type(key) ~= "string" then return false end
-            key = key:gsub("%s+", "")
-            local ok, status = pcall(api.check_key, key)
-            local keyIsValid = (ok and type(status) == "table" and status.code == "KEY_VALID")
-            if not keyIsValid then
-                BHUB_NOTIFY({
-                    Title = "Key Error",
-                    Content = "The Entered Key Is Incorrect",
-                    Theme = {SliderProgress = Color3.fromRGB(255, 10, 10)}
-                })
-            end
-            return keyIsValid
-        end
-    )
 
-    BHUB_NOTIFY({
-        Title = "Key Loaded",
-        Content = "Key Loaded Succesfully"
-    })
-    
-    if type(script_key) ~= "string" or script_key == "" then
-        player:Kick("BHUB: KEY REQUIRED")
-        return
+    local function keyWorks(key)
+        if type(key) ~= "string" then return false end
+        local ok, status = pcall(api.check_key, (key:gsub("%s+", "")))
+        return ok and type(status) == "table" and status.code == "KEY_VALID"
     end
 
-    
-    
+    -- Only players without a working saved key ask for a trial, so nobody with a real
+    -- key is ever switched onto a short trial key. Luarmor checks the trial key too.
+    local savedKey = module:GetSavedKey()
+    if keyWorks(savedKey) then
+        script_key = savedKey
+        BHUB_NOTIFY({
+            Title = "Key Loaded",
+            Content = "Key Loaded Succesfully"
+        })
+    else
+        local trial = requestTrial()
+        if trial and keyWorks(trial.key) then
+            script_key = trial.key
+            BHUB_NOTIFY({
+                Title = "Free Trial",
+                Content = "You got " .. tostring(trial.minutes) .. " free minutes! Get a key to keep using the script."
+            })
+        end
+    end
+
+    if not script_key then
+        BHUB_NOTIFY({
+            Title = "Key System",
+            Content = "Enter A Key To Continue"
+        })
+
+        script_key = module:GetKeyInput(
+            "discord.gg/BananaHub",
+            "https://raw.githubusercontent.com/diepedyt/bui/refs/heads/main/HowToFreeKey.txt",
+            function(key)
+                if type(key) ~= "string" then return false end
+                key = key:gsub("%s+", "")
+                local ok, status = pcall(api.check_key, key)
+                local keyIsValid = (ok and type(status) == "table" and status.code == "KEY_VALID")
+                if not keyIsValid then
+                    BHUB_NOTIFY({
+                        Title = "Key Error",
+                        Content = "The Entered Key Is Incorrect",
+                        Theme = {SliderProgress = Color3.fromRGB(255, 10, 10)}
+                    })
+                end
+                return keyIsValid
+            end
+        )
+
+        BHUB_NOTIFY({
+            Title = "Key Loaded",
+            Content = "Key Loaded Succesfully"
+        })
+
+        if type(script_key) ~= "string" or script_key == "" then
+            player:Kick("BHUB: KEY REQUIRED")
+            return
+        end
+    end
 end
 
 loadstring(game:HttpGet(loader))()
