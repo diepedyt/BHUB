@@ -142,22 +142,76 @@ if FFA[scriptName] ~= true and not script_key then
     api.script_id = scriptId
     module:SetSavedKeyFile("BananaHub" .. scriptId .. tostring(player.UserId))
 
-    local function keyWorks(key)
-        if type(key) ~= "string" then return false end
-        local ok, status = pcall(api.check_key, (key:gsub("%s+", "")))
-        return ok and type(status) == "table" and status.code == "KEY_VALID"
+    -- true: KEY_VALID. false: no usable key (none, KEY_EXPIRED, KEY_INVALID, KEY_INCORRECT).
+    -- nil: unknown (SDK error, HWID lock, ban, time/security/executor error, anything else).
+    local checked = {}
+    local function checkKey(key)
+        key = type(key) == "string" and key:gsub("%s+", "") or ""
+        if key == "" then return false end
+        checked[key] = true
+        local ok, status = pcall(api.check_key, key)
+        local code = ok and type(status) == "table" and status.code
+        if code == "KEY_VALID" then return true end
+        if code == "KEY_EXPIRED" or code == "KEY_INVALID" or code == "KEY_INCORRECT" then return false end
+        return nil
     end
 
-    -- Only players without a working saved key ask for a trial, so nobody with a real
-    -- key is ever switched onto a short trial key. Luarmor checks the trial key too.
+    local function keyWorks(key)
+        return checkKey(key) == true
+    end
+
+    -- Keys work in every BHUB script, but each script saves its own key file. Checks up to 5
+    -- other keys this player saved (other scripts, older names, the key UI's default file).
+    -- Returns the first valid key, or nil and whether any check was inconclusive.
+    local function findOtherSavedKey()
+        if type(listfiles) ~= "function" or type(isfile) ~= "function" or type(readfile) ~= "function" then
+            return nil, false
+        end
+        local listed, files = pcall(listfiles, "")
+        if not listed or type(files) ~= "table" then return nil, false end
+        local userId = tostring(player.UserId)
+        local ownFile, defaultFile = "BananaHub" .. scriptId .. userId .. ".txt", "savedKey12038" .. userId .. ".txt"
+        local pattern = "^BananaHub%w+" .. userId .. "%.txt$"
+        local checks, unsure = 0, false
+        for _, path in ipairs(files) do
+            local name = type(path) == "string" and path:match("[^/\\]+$")
+            if name and name ~= ownFile and (name == defaultFile or name:match(pattern)) then
+                local read, key = pcall(function() return isfile(name) and readfile(name) end)
+                key = read and type(key) == "string" and key:gsub("%s+", "") or ""
+                if key ~= "" and not checked[key] then
+                    local works = checkKey(key)
+                    if works then return key end
+                    unsure = unsure or works == nil
+                    checks = checks + 1
+                    if checks == 5 then break end
+                end
+            end
+        end
+        return nil, unsure
+    end
+
+    -- Only players who definitely have no usable key ask for a trial: nothing saved, or every
+    -- saved key checked is expired, invalid or incorrect. Anything else (SDK error, HWID lock,
+    -- ban, ...) runs the normal key system, so nobody with a real key is switched onto a
+    -- short trial key. Luarmor checks the trial key too.
     local savedKey = module:GetSavedKey()
-    if keyWorks(savedKey) then
+    local works = checkKey(savedKey)
+    local unsure = works == nil
+    if works == false then
+        local otherKey
+        otherKey, unsure = findOtherSavedKey()
+        if otherKey then
+            savedKey, works = otherKey, true
+            pcall(module.SaveKey, module, otherKey)
+        end
+    end
+    if works then
         script_key = savedKey
         BHUB_NOTIFY({
             Title = "Key Loaded",
             Content = "Key Loaded Succesfully"
         })
-    else
+    elseif not unsure then
         local trial = requestTrial()
         if trial and keyWorks(trial.key) then
             script_key = trial.key
